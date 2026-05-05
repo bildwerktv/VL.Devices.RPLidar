@@ -168,7 +168,7 @@
               <Choice Kind="TypeFlag" Name="ComPort" />
             </p:TypeAnnotation>
           </Pad>
-          <Pad Id="OZsz5vrKbv0NYKGr4YggbP" Comment="Enabled" Bounds="328,266,35,35" ShowValueBox="true" isIOBox="true" Value="True">
+          <Pad Id="OZsz5vrKbv0NYKGr4YggbP" Comment="Enabled" Bounds="303,251,35,35" ShowValueBox="true" isIOBox="true" Value="True">
             <p:TypeAnnotation LastCategoryFullName="Primitive" LastDependency="VL.CoreLib.vl">
               <Choice Kind="ImmutableTypeFlag" Name="Boolean" />
             </p:TypeAnnotation>
@@ -182,7 +182,7 @@
               <Choice Kind="ProcessAppFlag" Name="Renderer" />
             </p:NodeReference>
             <Pin Id="EjOusmlA2cdMmVkEAES3UR" Name="Node Context" Kind="InputPin" IsHidden="true" />
-            <Pin Id="TtZwAkgB6L6POCKCVeBp0T" Name="Bounds" Kind="InputPin" DefaultValue="1033, 58, 865, 751" IsHidden="true" />
+            <Pin Id="TtZwAkgB6L6POCKCVeBp0T" Name="Bounds" Kind="InputPin" DefaultValue="1572, 149, 865, 751" IsHidden="true" />
             <Pin Id="E4T12eGHLfyM8JKHktXwh2" Name="Save Bounds" Kind="InputPin" IsHidden="true" />
             <Pin Id="OtdWdAyA5IQPkiAnqvkqGy" Name="Bound to Document" Kind="InputPin" IsHidden="true" />
             <Pin Id="LJqrArITz7wO6V6NxWjNwe" Name="Dialog If Document Changed" Kind="InputPin" IsHidden="true" />
@@ -225,7 +225,7 @@
               <Choice Kind="TypeFlag" Name="String" />
             </p:TypeAnnotation>
           </Pad>
-          <Pad Id="VUrf8KvubdZO0BlKh1LP21" Comment="Scan" Bounds="246,266,35,35" ShowValueBox="true" isIOBox="true" Value="True">
+          <Pad Id="VUrf8KvubdZO0BlKh1LP21" Comment="Scan" Bounds="221,251,35,35" ShowValueBox="true" isIOBox="true" Value="True">
             <p:TypeAnnotation LastCategoryFullName="Primitive" LastDependency="VL.CoreLib.vl">
               <Choice Kind="ImmutableTypeFlag" Name="Boolean" />
             </p:TypeAnnotation>
@@ -260,12 +260,12 @@
               <p:stringtype p:Assembly="VL.Core" p:Type="VL.Core.StringType">Comment</p:stringtype>
             </p:ValueBoxSettings>
           </Pad>
-          <Pad Id="Si91mZWTZA3PgcgrakMn3V" Comment="Error Code" Bounds="216,358,35,15" ShowValueBox="true" isIOBox="true">
+          <Pad Id="Si91mZWTZA3PgcgrakMn3V" Comment="Error Code" Bounds="363,360,35,15" ShowValueBox="true" isIOBox="true">
             <p:TypeAnnotation LastCategoryFullName="Primitive" LastDependency="VL.CoreLib.vl">
               <Choice Kind="TypeFlag" Name="Integer32" />
             </p:TypeAnnotation>
           </Pad>
-          <Pad Id="MoVcbYVV61gLI6ILDjJfWL" Comment="Is Connected" Bounds="419,358,35,35" ShowValueBox="true" isIOBox="true">
+          <Pad Id="MoVcbYVV61gLI6ILDjJfWL" Comment="Is Connected" Bounds="223,351,35,35" ShowValueBox="true" isIOBox="true">
             <p:TypeAnnotation LastCategoryFullName="Primitive" LastDependency="VL.CoreLib.vl">
               <Choice Kind="TypeFlag" Name="Boolean" />
             </p:TypeAnnotation>
@@ -315,7 +315,7 @@
             <Pin Id="I0M76sUDRSCPEZquiPWiUx" Name="Value" Kind="OutputPin" />
             <Pin Id="CNnFJ9F5ZZwNRBi4W62kHO" Name="On Data" Kind="OutputPin" />
           </Node>
-          <Node Bounds="166,310,105,19" Id="PYY1079Z3FNQRPO09amUPm">
+          <Node Bounds="166,310,125,19" Id="PYY1079Z3FNQRPO09amUPm">
             <p:NodeReference LastCategoryFullName="Devices.RPLidar" LastDependency="VL.Devices.RPLidarUtils.csproj">
               <Choice Kind="NodeFlag" Name="Node" Fixed="true" />
               <Choice Kind="ProcessAppFlag" Name="RPLidar" />
@@ -331,13 +331,28 @@
             <Pin Id="G7Nvmk0m0YQMCkVGwD8ioA" Name="Is Connected" Kind="OutputPin" />
             <Pin Id="S4BaIHFyiw4O9DUCEZkP4m" Name="Status" Kind="OutputPin" />
             <Pin Id="ChHYGPtG5lnOFzwElwcYRx" Name="Error Code" Kind="OutputPin" />
+            <Pin Id="MVsDKCmLVAqPhep1xIBgXz" Name="Scan Mode" Kind="InputPin" />
           </Node>
           <Pad Id="JpnrItN3IqCP95twJ5jCC3" Comment="Baud Rate" Bounds="186,230,111,15" ShowValueBox="true" isIOBox="true" Value="CAndSSeries">
             <p:TypeAnnotation LastCategoryFullName="Devices.RPLidar.RPLidarNode" LastDependency="VL.Devices.RPLidarUtils.csproj">
               <Choice Kind="TypeFlag" Name="RPLidarBaudRate" />
             </p:TypeAnnotation>
           </Pad>
-          <Pad Id="ArHMXpr5cJaMZsVGnDE4n6" Comment="Status" Bounds="373,480,49,15" ShowValueBox="true" isIOBox="true" />
+          <Pad Id="ArHMXpr5cJaMZsVGnDE4n6" Comment="Status" Bounds="373,480,77,15" ShowValueBox="true" isIOBox="true" />
+          <Pad Id="DYieBg4bgw4M2CReaaQTzt" Bounds="369,229,284,20" ShowValueBox="true" isIOBox="true" Value="&lt;-- Choose the one for your Lidar">
+            <p:TypeAnnotation LastCategoryFullName="Primitive" LastDependency="VL.CoreLib.vl">
+              <Choice Kind="TypeFlag" Name="String" />
+            </p:TypeAnnotation>
+            <p:ValueBoxSettings>
+              <p:fontsize p:Type="Int32">9</p:fontsize>
+              <p:stringtype p:Assembly="VL.Core" p:Type="VL.Core.StringType">Comment</p:stringtype>
+            </p:ValueBoxSettings>
+          </Pad>
+          <Pad Id="PjQvHojB9QRO1EeuHjJWP3" Comment="Scan Mode" Bounds="419,270,70,15" ShowValueBox="true" isIOBox="true" Value="Standard">
+            <p:TypeAnnotation LastCategoryFullName="Devices.RPLidar.RPLidarNode" LastDependency="VL.Devices.RPLidarUtils.csproj">
+              <Choice Kind="TypeFlag" Name="RPLidarScanMode" />
+            </p:TypeAnnotation>
+          </Pad>
         </Canvas>
         <Patch Id="VQ03JHOiNJ2MKwdCwZ2kEg" Name="Create" />
         <Patch Id="VUhWUKG80d4QcoVSLYgxc4" Name="Update" />
@@ -358,6 +373,7 @@
         <Link Id="DibbVQwGC8gPaxv4fYwQAI" Ids="G7Nvmk0m0YQMCkVGwD8ioA,MoVcbYVV61gLI6ILDjJfWL" />
         <Link Id="OUomF2Y0Lf6QHvdoPNc1n2" Ids="S4BaIHFyiw4O9DUCEZkP4m,ArHMXpr5cJaMZsVGnDE4n6" />
         <Link Id="MtRDQKSSgUdP2m07a5sOwQ" Ids="ChHYGPtG5lnOFzwElwcYRx,Si91mZWTZA3PgcgrakMn3V" />
+        <Link Id="AEr8bJC3zixP7mEFJVZPfT" Ids="PjQvHojB9QRO1EeuHjJWP3,MVsDKCmLVAqPhep1xIBgXz" />
       </Patch>
     </Node>
   </Patch>
