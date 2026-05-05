@@ -1,5 +1,6 @@
 ﻿using Stride.Core.Mathematics;
 using System.IO.Ports;
+using System.Reactive.Subjects;
 using VL.Core;
 using VL.Core.Import;
 using VL.Lib.Collections;
@@ -7,6 +8,7 @@ using ComPort = VL.Lib.IO.Ports.ComPort;
 
 namespace Devices.RPLidar;
 
+/// <summary>Connects to an RPLIDAR device and streams 360° point-cloud scans.</summary>
 [ProcessNode(Name = "RPLidar")]
 public sealed class RPLidarNode : IDisposable
 {
@@ -15,9 +17,8 @@ public sealed class RPLidarNode : IDisposable
     private Thread? _readThread;
     private CancellationTokenSource _cts = new();
 
-    // ── Scan output (shared between background thread and Update) ────────────
-    private readonly object _scanLock = new();
-    private Spread<Vector2> _latestScan = Spread<Vector2>.Empty;
+    // ── Reactive scan output — stable for the lifetime of this node instance
+    private readonly Subject<Spread<Vector2>> _scanSubject = new();
 
     // ── Live scaling (written by main thread, read by background thread) ─────
     private volatile float _scaling = 1f;
@@ -27,23 +28,28 @@ public sealed class RPLidarNode : IDisposable
     private int _lastBaud = -1;
     private int _lastTimeout = -1;
     private bool _lastEnabled = false;
+    private bool _lastScan = false;
+    private volatile bool _isScanning = false;
 
-    // ── Status (written by background thread, read by main thread) ───────────
+    // ── Status (written by bg thread + main thread, read by main thread) ─────
     private readonly object _statusLock = new();
     private volatile bool _isConnected = false;
     private string _deviceInfo = "";
     private string _statusText = "";
     private int _errorCode = 0;
 
+    // ── Parsed device info (set on connect, reset on disconnect) ─────────────
+    private Protocol.DeviceInfo _parsedDeviceInfo;
+
     // ────────────────────────────────────────────────────────────────────────
     // Update — called every frame by vvvv on the main thread
     // ────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Manages the device connection and returns the most recent 360° scan.
+    /// Manages the device connection and emits a reactive stream of 360° scans.
     /// </summary>
     public void Update(
-        out Spread<Vector2> points,
+        out IObservable<Spread<Vector2>> result,
         out string deviceInfo,
         out bool isConnected,
         out string status,
@@ -51,6 +57,7 @@ public sealed class RPLidarNode : IDisposable
         ComPort portName = default!,
         RPLidarBaudRate baudRate = RPLidarBaudRate.ASeries,
         int timeout = 2000,
+        bool scan = true,
         bool enabled = false,
         float scaling = 1f)
     {
@@ -58,26 +65,46 @@ public sealed class RPLidarNode : IDisposable
         _scaling = scaling;
 
         string port = portName?.Value ?? string.Empty;
+        int baud = (int)baudRate;
 
         bool needReconnect =
             enabled != _lastEnabled ||
             port != _lastPort ||
-            (int)baudRate != _lastBaud ||
+            baud != _lastBaud ||
             timeout != _lastTimeout;
+
+        bool scanChanged = scan != _lastScan;
 
         if (needReconnect)
         {
-            Disconnect();
-            // Store the new values before TryConnect so that internal helpers
-            // (e.g. the C1 baud-rate hint in TryGetInfo) see the correct baud rate.
+            FullDisconnect();
             _lastEnabled = enabled;
             _lastPort = port;
-            _lastBaud = (int)baudRate;
+            _lastBaud = baud;
             _lastTimeout = timeout;
-            if (enabled) TryConnect(port, (int)baudRate, timeout);
+            _lastScan = scan;
+
+            if (enabled && TryOpenAndIdentify(port, baud, timeout) && scan)
+                TryStartScanning(timeout);
+        }
+        else if (scanChanged && enabled)
+        {
+            _lastScan = scan;
+            if (scan)
+            {
+                // StopScanning closes the port to unblock Read() quickly.
+                // If the port was closed, reconnect before starting the scan.
+                if (!_isConnected)
+                    TryOpenAndIdentify(_lastPort, _lastBaud, _lastTimeout);
+                TryStartScanning(timeout);
+            }
+            else
+            {
+                StopScanning();
+            }
         }
 
-        lock (_scanLock) points = _latestScan;
+        result = _scanSubject;
         lock (_statusLock) { deviceInfo = _deviceInfo; status = _statusText; errorCode = _errorCode; }
         isConnected = _isConnected;
     }
@@ -86,7 +113,8 @@ public sealed class RPLidarNode : IDisposable
     // Connection lifecycle
     // ────────────────────────────────────────────────────────────────────────
 
-    private void TryConnect(string portName, int baudRate, int timeout)
+    /// <summary>Opens the port and runs GET_INFO + GET_HEALTH. Does NOT start scanning.</summary>
+    private bool TryOpenAndIdentify(string portName, int baudRate, int timeout)
     {
         try
         {
@@ -94,48 +122,68 @@ public sealed class RPLidarNode : IDisposable
 
             _port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One)
             {
-                // Use a generous read timeout for the initial handshake.
-                // The configured timeout applies to the scan loop later.
+                // Generous read timeout for the initial handshake.
                 ReadTimeout = Math.Max(timeout, 3000),
                 WriteTimeout = 1000
+                // DtrEnable intentionally left at OS default (false on Windows).
+                // A-series devices use DTR LOW to enable the motor; setting it HIGH
+                // during init causes the USB-UART chip to emit spurious bytes that
+                // confuse the GET_INFO response scanner.
             };
             _port.Open();
             _port.DiscardInBuffer();
 
-            // Send STOP and flush. Do NOT send CMD_RESET: the C1 (and S-series)
-            // output a multi-second boot banner after reset that corrupts the
-            // response descriptor for the subsequent GET_INFO command.
-            SendCmd(Protocol.CMD_STOP);
-            Thread.Sleep(300);
-            _port.DiscardInBuffer();
-            Thread.Sleep(100);      // catch any trailing bytes still arriving
-            _port.DiscardInBuffer();
-
-            // Identify the device (also emits a baud-rate hint for C1).
+            // Identify the device without sending CMD_STOP first.
+            // CMD_STOP before GET_INFO breaks the A1 (causes it to stop responding).
+            // The C1/S-series do not need it here — CMD_STOP is only required when
+            // stopping an active scan, which FullDisconnect/StopScanning handle.
             if (!TryGetInfo(timeout))
             {
-                SetStatus("Device info failed — verify baud rate (C1 needs 460800)");
+                SetStatus("Device info failed — check baud rate and connection");
                 Cleanup();
-                return;
+                return false;
             }
 
             TryGetHealth(timeout);
+            _isConnected = true;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            SetStatus("Connect failed: " + ex.Message);
+            Cleanup();
+            return false;
+        }
+    }
 
-            // Start the standard scan (works on every RPLIDAR model).
+    /// <summary>Sends CMD_SCAN, enables the motor via DTR, and starts the read thread.</summary>
+    private void TryStartScanning(int timeout)
+    {
+        if (_port?.IsOpen != true || _isScanning) return;
+        try
+        {
+            // Motor on.
+            // A2/A3-series: DTR enables the motor circuit AND a PWM command sets the speed.
+            // A1-series: DTR alone is sufficient (no PWM command supported).
+            // C/S-series: built-in motor controller, DTR and PWM are irrelevant.
+            _port.DtrEnable = false;
+            if (_parsedDeviceInfo.NeedsPwmMotorControl)
+            {
+                SendMotorPwm(Protocol.DEFAULT_MOTOR_PWM);
+                Thread.Sleep(50); // give the device time to process the PWM command
+            }
+
             SendCmd(Protocol.CMD_SCAN);
             var desc = ReadDescriptor(timeout);
             if (!desc.Valid || desc.DataType != Protocol.RESP_SCAN)
             {
                 SetStatus($"Unexpected scan response type 0x{desc.DataType:X2}");
-                Cleanup();
+                _port.DtrEnable = true; // motor back off on failure
                 return;
             }
 
-            // Restore user-configured timeout for the ongoing scan loop.
             _port.ReadTimeout = timeout;
-
-            _isConnected = true;
-            SetStatus("Scanning");
+            _isScanning = true;
 
             _readThread = new Thread(() => ScanLoop(_cts.Token))
             {
@@ -146,39 +194,72 @@ public sealed class RPLidarNode : IDisposable
         }
         catch (Exception ex)
         {
-            SetStatus("Connect failed: " + ex.Message);
-            Cleanup();
+            SetStatus("Scan start failed: " + ex.Message);
+            try { _port!.DtrEnable = true; } catch { }
         }
     }
 
-    public enum RPLidarBaudRate
+    /// <summary>Stops scanning but keeps the port open (device remains identified).</summary>
+    private void StopScanning()
     {
-        ASeries = 115200,    // → "A Series"
-        CAndSSeries = 460800 // → "C And S Series"
-    }
-
-    private void Disconnect()
-    {
+        if (!_isScanning) return;
         _cts.Cancel();
-
-        // Tell the device to stop scanning before closing the port.
         if (_port?.IsOpen == true)
         {
             try { SendCmd(Protocol.CMD_STOP); Thread.Sleep(50); } catch { }
+            if (_parsedDeviceInfo.NeedsPwmMotorControl)
+                try { SendMotorPwm(Protocol.STOP_MOTOR_PWM); } catch { }
+            try { _port.DtrEnable = true; } catch { } // motor off
         }
-
-        _readThread?.Join(millisecondsTimeout: 1500);
+        // Close the port BEFORE joining: the background thread may be blocked in
+        // Read() with a long timeout; closing the port causes Read() to throw an
+        // IOException which the thread catches and exits immediately.
+        var savedPort = _port;
+        _port = null;
+        _isConnected = false;
+        try { savedPort?.DiscardInBuffer(); } catch { }
+        try { savedPort?.Close(); } catch { }
+        try { savedPort?.Dispose(); } catch { }
+        _readThread?.Join(millisecondsTimeout: 1000);
         _readThread = null;
-        Cleanup();
+        _cts = new CancellationTokenSource(); // fresh token for next TryStartScanning
+        _isScanning = false;
+    }
 
-        lock (_scanLock) _latestScan = Spread<Vector2>.Empty;
+    /// <summary>Stops scanning and closes the port entirely.</summary>
+    private void FullDisconnect()
+    {
+        if (_isScanning)
+        {
+            _cts.Cancel();
+            if (_port?.IsOpen == true)
+            {
+                try { SendCmd(Protocol.CMD_STOP); Thread.Sleep(50); } catch { }
+                if (_parsedDeviceInfo.NeedsPwmMotorControl)
+                    try { SendMotorPwm(Protocol.STOP_MOTOR_PWM); } catch { }
+                try { _port.DtrEnable = true; } catch { } // motor off
+            }
+            // Close port before joining — interrupts any blocked Read() in the
+            // background thread so Join() returns in milliseconds, not seconds.
+            Cleanup();
+            _readThread?.Join(millisecondsTimeout: 1000);
+            _readThread = null;
+            _isScanning = false;
+        }
+        else
+        {
+            Cleanup();
+        }
+        _parsedDeviceInfo = default;
         lock (_statusLock) { _deviceInfo = ""; _statusText = ""; _errorCode = 0; }
     }
 
     private void Cleanup()
     {
-        try { _port?.Close(); } catch { }
-        _port?.Dispose();
+        if (_port is null) return;
+        try { _port.DiscardInBuffer(); } catch { }
+        try { _port.Close(); } catch { }
+        try { _port.Dispose(); } catch { }
         _port = null;
         _isConnected = false;
     }
@@ -192,13 +273,13 @@ public sealed class RPLidarNode : IDisposable
         var rawBuf = new byte[Protocol.SCAN_UNIT];
         // Pre-allocate a list sized for one RPLIDAR C1 scan (~5 000 points).
         var pending = new List<Vector2>(5500);
-        bool started = false;   // true once the first valid byte has arrived
+        bool started = false;
 
         // The RPLIDAR waits for its motor to reach stable speed before emitting
-        // any data.  Use a long initial timeout so this spin-up phase is covered;
+        // any data. Use a long initial timeout so this spin-up phase is covered;
         // once data is flowing switch to a tighter watchdog.
-        const int SpinUpTimeoutMs = 15_000;   // generous for cold-start
-        const int RunningTimeoutMs = 5_000;   // watchdog once streaming
+        const int SpinUpTimeoutMs = 15_000;
+        const int RunningTimeoutMs = 5_000;
 
         while (!ct.IsCancellationRequested)
         {
@@ -256,16 +337,14 @@ public sealed class RPLidarNode : IDisposable
         }
 
         _isConnected = false;
+        _isScanning = false;
     }
 
     private void PublishScan(List<Vector2> src)
     {
-        // Build Spread outside the lock to minimise contention.
         var builder = new SpreadBuilder<Vector2>(src.Count);
         foreach (var v in src) builder.Add(v);
-        var scan = builder.ToSpread();
-
-        lock (_scanLock) _latestScan = scan;
+        _scanSubject.OnNext(builder.ToSpread());
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -279,17 +358,23 @@ public sealed class RPLidarNode : IDisposable
         _port.Write(p, 0, p.Length);
     }
 
+    /// <summary>Sends CMD_SET_MOTOR_PWM for A2/A3-series devices. No-ops on other series.</summary>
+    private void SendMotorPwm(ushort pwm)
+    {
+        if (_port?.IsOpen != true) return;
+        var p = Protocol.MotorPwmCommand(pwm);
+        _port.Write(p, 0, p.Length);
+    }
+
     /// <summary>
-    /// Read a 7-byte response descriptor, scanning for the 0xA5 0x5A sync
-    /// pattern first.  This tolerates stray bytes (boot banner fragments, STOP
-    /// echoes) that may precede the real response.
+    /// Read a 7-byte response descriptor, scanning byte-by-byte for the 0xA5 0x5A
+    /// sync pattern. This tolerates stray bytes that may precede the real response.
     /// </summary>
     private Protocol.Descriptor ReadDescriptor(int timeoutMs)
     {
         var buf = new byte[Protocol.DESC_SIZE];
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
 
-        // Scan byte-by-byte for the 0xA5 0x5A sync header.
         byte prev = 0;
         while (true)
         {
@@ -304,7 +389,6 @@ public sealed class RPLidarNode : IDisposable
             prev = cur;
         }
 
-        // Read the remaining 5 bytes of the descriptor.
         int read = 2;
         while (read < buf.Length)
         {
@@ -338,9 +422,10 @@ public sealed class RPLidarNode : IDisposable
             ReadBytes(data, timeoutMs);
 
             var info = Protocol.ParseDeviceInfo(data);
+            _parsedDeviceInfo = info;
 
             string hint = info.IsHighSpeedDevice && _lastBaud < 460800
-                ? "\n⚠  C1/S-series detected — set Baud Rate to 460800 for full performance"
+                ? "\n⚠  C1/S-series detected — set Baud Rate to C And S Series (460800)"
                 : string.Empty;
 
             lock (_statusLock)
@@ -395,8 +480,28 @@ public sealed class RPLidarNode : IDisposable
     }
 
     // ────────────────────────────────────────────────────────────────────────
+    // Enums
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Serial baud rate for the connected RPLIDAR model.</summary>
+    public enum RPLidarBaudRate
+    {
+        /// <summary>A1, A2, A3 series — 115200 baud.</summary>
+        ASeries = 115200,
+        /// <summary>Some A2/A3 variants — 256000 baud.</summary>
+        ASeriesHighSpeed = 256000,
+        /// <summary>C1, S1, S2, S3 series — 460800 baud.</summary>
+        CAndSSeries = 460800
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
     // IDisposable
     // ────────────────────────────────────────────────────────────────────────
 
-    public void Dispose() => Disconnect();
+    /// <summary>Stops the scan, releases the serial port, and completes the scan observable.</summary>
+    public void Dispose()
+    {
+        FullDisconnect();
+        _scanSubject.OnCompleted();
+    }
 }

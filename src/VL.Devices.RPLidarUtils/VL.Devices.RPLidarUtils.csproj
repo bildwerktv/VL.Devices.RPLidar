@@ -11,6 +11,7 @@
     <PackageReference Include="VL.Core" Version="2025.7.*" />
     <PackageReference Include="VL.CoreLib" Version="2025.7.*" />
     <PackageReference Include="System.IO.Ports" Version="8.*" />
+    <PackageReference Include="System.Reactive" Version="6.*" />
   </ItemGroup>
 
   <ItemGroup>

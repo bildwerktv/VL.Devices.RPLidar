@@ -16,6 +16,12 @@ internal static class Protocol
     public const byte CMD_GET_INFO   = 0x50;
     public const byte CMD_GET_HEALTH = 0x52;
 
+    // ── Commands (with payload) ──────────────────────────────────────────────
+    // A2/A3 series only — sets the motor PWM speed (0 = stop, 660 = default).
+    public const byte   CMD_SET_MOTOR_PWM   = 0xF0;
+    public const ushort DEFAULT_MOTOR_PWM   = 660;
+    public const ushort STOP_MOTOR_PWM      = 0;
+
     // ── Response framing ─────────────────────────────────────────────────────
     public const byte RESP_SYNC1 = 0xA5;
     public const byte RESP_SYNC2 = 0x5A;
@@ -35,6 +41,28 @@ internal static class Protocol
 
     /// <summary>Build a simple two-byte command request (no payload).</summary>
     public static byte[] SimpleCommand(byte cmd) => new[] { SYNC, cmd };
+
+    /// <summary>
+    /// Build a payload command: [0xA5] [cmd] [len] [payload...] [checksum].
+    /// Checksum is the XOR of ALL preceding bytes (SYNC + CMD + len + payload),
+    /// matching the Slamtec protocol spec and the RPLidar4Net reference implementation.
+    /// </summary>
+    public static byte[] PayloadCommand(byte cmd, byte[] payload)
+    {
+        var pkt = new byte[3 + payload.Length + 1];
+        pkt[0] = SYNC;
+        pkt[1] = cmd;
+        pkt[2] = (byte)payload.Length;
+        Array.Copy(payload, 0, pkt, 3, payload.Length);
+        byte checksum = 0;
+        for (int i = 0; i < 3 + payload.Length; i++) checksum ^= pkt[i];
+        pkt[3 + payload.Length] = checksum;
+        return pkt;
+    }
+
+    /// <summary>Build a CMD_SET_MOTOR_PWM packet for A2/A3-series devices.</summary>
+    public static byte[] MotorPwmCommand(ushort pwm)
+        => PayloadCommand(CMD_SET_MOTOR_PWM, new[] { (byte)(pwm & 0xFF), (byte)(pwm >> 8) });
 
     // ── Response descriptor ──────────────────────────────────────────────────
 
@@ -155,6 +183,13 @@ internal static class Protocol
 
         /// <summary>True for C1 / S-series devices that require 460800 baud.</summary>
         public bool IsHighSpeedDevice => MajorModel >= 4;
+
+        /// <summary>
+        /// True for A2-series devices (MajorModel == 2) that require CMD_SET_MOTOR_PWM
+        /// to actually spin the motor. A1 devices use DTR alone; C/S devices have a
+        /// built-in motor controller and ignore the PWM command.
+        /// </summary>
+        public bool NeedsPwmMotorControl => MajorModel == 2;
 
         internal DeviceInfo(byte model, byte fwMin, byte fwMaj, byte hw, string sn)
         { ModelByte = model; FirmwareMinor = fwMin; FirmwareMajor = fwMaj; Hardware = hw; SerialNumber = sn; }
