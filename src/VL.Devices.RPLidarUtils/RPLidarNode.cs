@@ -29,6 +29,7 @@ public sealed class RPLidarNode : IDisposable
     private int _lastTimeout = -1;
     private bool _lastEnabled = false;
     private bool _lastScan = false;
+    private RPLidarScanMode _lastScanMode = RPLidarScanMode.Standard;
     private volatile bool _isScanning = false;
 
     // ── Status (written by bg thread + main thread, read by main thread) ─────
@@ -59,7 +60,8 @@ public sealed class RPLidarNode : IDisposable
         int timeout = 2000,
         bool scan = true,
         bool enabled = false,
-        float scaling = 1f)
+        float scaling = 1f,
+        RPLidarScanMode scanMode = RPLidarScanMode.Standard)
     {
         // Always update scaling so the background thread picks it up immediately.
         _scaling = scaling;
@@ -71,7 +73,8 @@ public sealed class RPLidarNode : IDisposable
             enabled != _lastEnabled ||
             port != _lastPort ||
             baud != _lastBaud ||
-            timeout != _lastTimeout;
+            timeout != _lastTimeout ||
+            scanMode != _lastScanMode;
 
         bool scanChanged = scan != _lastScan;
 
@@ -83,9 +86,10 @@ public sealed class RPLidarNode : IDisposable
             _lastBaud = baud;
             _lastTimeout = timeout;
             _lastScan = scan;
+            _lastScanMode = scanMode;
 
             if (enabled && TryOpenAndIdentify(port, baud, timeout) && scan)
-                TryStartScanning(timeout);
+                TryStartScanning(timeout, scanMode);
         }
         else if (scanChanged && enabled)
         {
@@ -96,7 +100,7 @@ public sealed class RPLidarNode : IDisposable
                 // If the port was closed, reconnect before starting the scan.
                 if (!_isConnected)
                     TryOpenAndIdentify(_lastPort, _lastBaud, _lastTimeout);
-                TryStartScanning(timeout);
+                TryStartScanning(timeout, _lastScanMode);
             }
             else
             {
@@ -156,8 +160,8 @@ public sealed class RPLidarNode : IDisposable
         }
     }
 
-    /// <summary>Sends CMD_SCAN, enables the motor via DTR, and starts the read thread.</summary>
-    private void TryStartScanning(int timeout)
+    /// <summary>Sends the scan command, enables the motor, and starts the read thread.</summary>
+    private void TryStartScanning(int timeout, RPLidarScanMode mode)
     {
         if (_port?.IsOpen != true || _isScanning) return;
         try
@@ -173,23 +177,51 @@ public sealed class RPLidarNode : IDisposable
                 Thread.Sleep(50); // give the device time to process the PWM command
             }
 
-            SendCmd(Protocol.CMD_SCAN);
-            var desc = ReadDescriptor(timeout);
-            if (!desc.Valid || desc.DataType != Protocol.RESP_SCAN)
+            // Resolve effective mode: fall back to Standard if device doesn't support Express.
+            bool useExpress = mode == RPLidarScanMode.Express;
+            if (useExpress && !_parsedDeviceInfo.SupportsExpressScan)
             {
+                SetStatus("Express scan not supported on this device — using Standard");
+                useExpress = false;
+            }
+
+            if (useExpress)
+            {
+                var pkt = Protocol.ExpressScanCommand();
+                _port.Write(pkt, 0, pkt.Length);
+            }
+            else
+            {
+                SendCmd(Protocol.CMD_SCAN);
+            }
+
+            var desc = ReadDescriptor(timeout);
+            // Express mode: accept either Standard Express (0x82, A2/A3) or Dense Capsule
+            // (0x85, C1/S-series) — both share the same command and 84-byte packet size.
+            bool validResponse = desc.Valid && (
+                (!useExpress && desc.DataType == Protocol.RESP_SCAN) ||
+                (useExpress  && desc.DataType == Protocol.RESP_EXPRESS_SCAN) ||
+                (useExpress  && desc.DataType == Protocol.RESP_DENSE_CAPSULE));
+
+            if (!validResponse)
+            {
+                // Always stop the device before returning — otherwise it keeps streaming
+                // and its bytes corrupt the next GET_INFO/GET_HEALTH exchange.
+                try { SendCmd(Protocol.CMD_STOP); Thread.Sleep(50); _port.DiscardInBuffer(); } catch { }
                 SetStatus($"Unexpected scan response type 0x{desc.DataType:X2}");
-                _port.DtrEnable = true; // motor back off on failure
+                try { _port.DtrEnable = true; } catch { } // motor back off on failure
                 return;
             }
 
             _port.ReadTimeout = timeout;
             _isScanning = true;
 
-            _readThread = new Thread(() => ScanLoop(_cts.Token))
-            {
-                IsBackground = true,
-                Name = "RPLidar.ScanLoop"
-            };
+            bool useDense = desc.DataType == Protocol.RESP_DENSE_CAPSULE;
+            _readThread = !useExpress
+                ? new Thread(() => ScanLoop(_cts.Token))       { IsBackground = true, Name = "RPLidar.ScanLoop" }
+                : useDense
+                    ? new Thread(() => DenseScanLoop(_cts.Token))  { IsBackground = true, Name = "RPLidar.DenseScanLoop" }
+                    : new Thread(() => ExpressScanLoop(_cts.Token)) { IsBackground = true, Name = "RPLidar.ExpressScanLoop" };
             _readThread.Start();
         }
         catch (Exception ex)
@@ -340,6 +372,218 @@ public sealed class RPLidarNode : IDisposable
         _isScanning = false;
     }
 
+    private void ExpressScanLoop(CancellationToken ct)
+    {
+        var rawBuf  = new byte[Protocol.EXPRESS_CAPSULE_SIZE];
+        var pending = new List<Vector2>(5500);
+        bool started  = false;
+        bool hasPrev  = false;
+        bool needRead = true; // false while re-syncing byte-by-byte
+        Protocol.ExpressCapsule prev = default;
+
+        // Re-use a scratch list to avoid per-capsule allocation inside the hot path.
+        var measurements = new List<Protocol.Measurement>(32);
+
+        const int SpinUpTimeoutMs  = 15_000;
+        const int RunningTimeoutMs =  5_000;
+
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                if (needRead)
+                {
+                    if (!started)
+                    {
+                        SetStatus("Waiting for motor…");
+                        _port!.ReadTimeout = SpinUpTimeoutMs;
+                    }
+
+                    ReadExact(rawBuf, 0, rawBuf.Length, ct);
+                    if (ct.IsCancellationRequested) break;
+
+                    if (!started)
+                    {
+                        started = true;
+                        _port!.ReadTimeout = RunningTimeoutMs;
+                        SetStatus("Scanning (Express)");
+                    }
+                }
+                needRead = true; // default: fetch a fresh capsule next iteration
+
+                var curr = Protocol.ParseExpressCapsule(rawBuf);
+                if (!curr.Valid)
+                {
+                    // Sync lost — shift 1 byte and fill the tail with one new byte, then
+                    // retry parsing WITHOUT calling ReadExact (needRead stays false).
+                    Array.Copy(rawBuf, 1, rawBuf, 0, rawBuf.Length - 1);
+                    rawBuf[rawBuf.Length - 1] = (byte)_port!.ReadByte();
+                    hasPrev  = false; // reset capsule pair — need fresh aligned pair
+                    needRead = false;
+                    continue;
+                }
+
+                // Need two consecutive capsules to decode angles.
+                if (!hasPrev)
+                {
+                    prev    = curr;
+                    hasPrev = true;
+                    continue;
+                }
+
+                measurements.Clear();
+                Protocol.DecodeCapsulePair(in prev, in curr, measurements);
+
+                // Primary: flush on revolution boundary.
+                // IsNewScan header bit is the canonical signal; also catch wrap-around
+                // geometrically (start angle drops by > 180°) for firmware that doesn't
+                // set the bit reliably.
+                bool angleWrap    = curr.StartAngleDeg < prev.StartAngleDeg - 180f;
+                bool flushNow     = (curr.IsNewScan || prev.IsNewScan || angleWrap) && pending.Count > 0;
+                // Fallback: publish if a full revolution's worth of points accumulates
+                // without triggering the primary condition (~32 meas/capsule × ~42 caps/rev).
+                bool flushFallback = pending.Count >= 1500;
+                if (flushNow || flushFallback)
+                {
+                    PublishScan(pending);
+                    pending.Clear();
+                }
+
+                prev = curr;
+
+                float s = _scaling;
+                foreach (var m in measurements)
+                {
+                    float rad      = m.Angle * (MathF.PI / 180f);
+                    float distMetr = m.Distance * 0.001f * s;   // mm → m
+                    pending.Add(new Vector2(
+                        distMetr * MathF.Cos(rad),
+                        distMetr * MathF.Sin(rad)));
+                }
+            }
+            catch (OperationCanceledException) { break; }
+            catch when (ct.IsCancellationRequested) { break; }
+            catch (TimeoutException) when (!ct.IsCancellationRequested)
+            {
+                SetStatus(started
+                    ? "Scan stopped — no data for 5 s (device disconnected?)"
+                    : "Motor did not start within 15 s — check device power");
+                break;
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Scan error: " + ex.Message);
+                break;
+            }
+        }
+
+        _isConnected = false;
+        _isScanning  = false;
+    }
+
+    private void DenseScanLoop(CancellationToken ct)
+    {
+        var rawBuf  = new byte[Protocol.EXPRESS_CAPSULE_SIZE]; // 84 bytes, same size
+        var pending = new List<Vector2>(5500);
+        bool started  = false;
+        bool hasPrev  = false;
+        bool needRead = true;
+        Protocol.DenseCapsule prev = default;
+
+        var measurements = new List<Protocol.Measurement>(40);
+
+        const int SpinUpTimeoutMs  = 15_000;
+        const int RunningTimeoutMs =  5_000;
+
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                if (needRead)
+                {
+                    if (!started)
+                    {
+                        SetStatus("Waiting for motor…");
+                        _port!.ReadTimeout = SpinUpTimeoutMs;
+                    }
+
+                    ReadExact(rawBuf, 0, rawBuf.Length, ct);
+                    if (ct.IsCancellationRequested) break;
+
+                    if (!started)
+                    {
+                        started = true;
+                        _port!.ReadTimeout = RunningTimeoutMs;
+                        SetStatus("Scanning (Express)");
+                    }
+                }
+                needRead = true;
+
+                var curr = Protocol.ParseDenseCapsule(rawBuf);
+                if (!curr.Valid)
+                {
+                    Array.Copy(rawBuf, 1, rawBuf, 0, rawBuf.Length - 1);
+                    rawBuf[rawBuf.Length - 1] = (byte)_port!.ReadByte();
+                    hasPrev  = false;
+                    needRead = false;
+                    continue;
+                }
+
+                if (!hasPrev)
+                {
+                    prev    = curr;
+                    hasPrev = true;
+                    continue;
+                }
+
+                measurements.Clear();
+                Protocol.DecodeDenseCapsulePair(in prev, in curr, measurements);
+
+                // In dense capsule format the IsNewScan header bit signals an encoder
+                // reset (per Slamtec SDK), not a revolution boundary. Use angle wrap-around
+                // instead: when the new capsule's start angle is more than 180° behind the
+                // previous one the sensor has completed a revolution.
+                bool angleWrap = curr.StartAngleDeg < prev.StartAngleDeg - 180f;
+                bool flushNow      = angleWrap && pending.Count > 0;
+                bool flushFallback = pending.Count >= 1500;
+                if (flushNow || flushFallback)
+                {
+                    PublishScan(pending);
+                    pending.Clear();
+                }
+
+                prev = curr;
+
+                float s = _scaling;
+                foreach (var m in measurements)
+                {
+                    float rad      = m.Angle * (MathF.PI / 180f);
+                    float distMetr = m.Distance * 0.001f * s;
+                    pending.Add(new Vector2(
+                        distMetr * MathF.Cos(rad),
+                        distMetr * MathF.Sin(rad)));
+                }
+            }
+            catch (OperationCanceledException) { break; }
+            catch when (ct.IsCancellationRequested) { break; }
+            catch (TimeoutException) when (!ct.IsCancellationRequested)
+            {
+                SetStatus(started
+                    ? "Scan stopped — no data for 5 s (device disconnected?)"
+                    : "Motor did not start within 15 s — check device power");
+                break;
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Scan error: " + ex.Message);
+                break;
+            }
+        }
+
+        _isConnected = false;
+        _isScanning  = false;
+    }
+
     private void PublishScan(List<Vector2> src)
     {
         var builder = new SpreadBuilder<Vector2>(src.Count);
@@ -482,6 +726,19 @@ public sealed class RPLidarNode : IDisposable
     // ────────────────────────────────────────────────────────────────────────
     // Enums
     // ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Scan protocol variant to use for data acquisition.</summary>
+    public enum RPLidarScanMode
+    {
+        /// <summary>Standard scan — one 5-byte packet per measurement. Supported on all models.</summary>
+        Standard,
+        /// <summary>
+        /// Express scan — 84-byte capsules per packet (FW ≥ 1.17). Falls back to Standard on A1.
+        /// A2/A3: Standard Express Capsule (0x82), 32 measurements/capsule.
+        /// C1/S-series: Dense Capsule (0x85), 40 measurements/capsule — selected automatically.
+        /// </summary>
+        Express
+    }
 
     /// <summary>Serial baud rate for the connected RPLIDAR model.</summary>
     public enum RPLidarBaudRate
