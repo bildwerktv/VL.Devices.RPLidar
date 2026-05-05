@@ -2,7 +2,7 @@
 
 For using RPLIDAR devices by [Slamtec](http://slamtec.com).  
 - List of potentially [supported devices](https://github.com/slamtec/rplidar_sdk?tab=readme-ov-file#supported-platforms)
-- Tested to work with [RPLidar A1](https://www.slamtec.com/en/Lidar/A1) and [RPLidar A2](https://www.slamtec.com/en/Lidar/A2) model A2M12
+- Tested to work with [RPLidar C1](https://www.slamtec.com/en/c1) and [RPLidar A2](https://www.slamtec.com/en/Lidar/A2) model A2M12
 - As of now defaults to the "standard" scan mode and does not support any of the "express" scan modes
 
 For use with vvvv, the visual live-programming environment for .NET: http://visualprogramming.net
@@ -21,7 +21,7 @@ For use with vvvv, the visual live-programming environment for .NET: http://visu
 - When making a pull-request, please make sure to read the general [guidelines on contributing to vvvv libraries](https://thegraybook.vvvv.org/reference/extending/contributing.html)
 
 ## Credits
-Based on [RPLidar4Net.IO](https://www.nuget.org/packages/RPLidar4Net.IO)
+Based on [rplidar_sdk](https://github.com/slamtec/rplidar_sdk)
 
 ## Sponsoring
 Development of this library was partially sponsored by:  

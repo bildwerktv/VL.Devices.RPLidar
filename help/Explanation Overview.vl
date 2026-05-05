@@ -163,26 +163,7 @@
       </p:NodeReference>
       <Patch Id="Np2R00enbdsOwdXcdVRmSJ">
         <Canvas Id="U46yhbwd53fMUYlVTA4WTz" CanvasType="Group">
-          <Node Bounds="164,312,105,19" Id="P6lWJCqWqbsQGezq6uDadC">
-            <p:NodeReference LastCategoryFullName="Main" LastDependency="callmenames-2024-10-01_02.vl">
-              <Choice Kind="NodeFlag" Name="Node" Fixed="true" />
-              <Choice Kind="ProcessNode" Name="RPLidar" />
-            </p:NodeReference>
-            <p:HelpFocus p:Assembly="VL.Lang" p:Type="VL.Model.HelpPriority">High</p:HelpFocus>
-            <Pin Id="MU89dxfve0eNpoIxvOarPz" Name="Node Context" Kind="InputPin" IsHidden="true" />
-            <Pin Id="JnIolCbESWXPv2lcPbVLBO" Name="Port Name" Kind="InputPin" />
-            <Pin Id="Ds4kRbo8MXHOTWrGvsoDXM" Name="Baud Rate" Kind="InputPin" />
-            <Pin Id="MAQCEvhOF7vPtXkOK5b6GD" Name="Timeout" Kind="InputPin" />
-            <Pin Id="ESyoTucCEnON5yz7l0XTnV" Name="Scaling" Kind="InputPin" />
-            <Pin Id="UGCgsgcdDJ5Mw9SlXyFnI6" Name="Scan" Kind="InputPin" />
-            <Pin Id="FOQNwLpOaGwNIumrQdHHtU" Name="Enabled" Kind="InputPin" />
-            <Pin Id="BUbMAdkcFi7QWlEn6gWKa0" Name="Result" Kind="OutputPin" />
-            <Pin Id="Rc74yTEGqBxLuGApCYJYZS" Name="Device Info" Kind="OutputPin" />
-            <Pin Id="L1TM6TVcs96Nsy6AjWoFb2" Name="Error Code" Kind="OutputPin" />
-            <Pin Id="RpI5Nqzc4KpNqeO1pTdS65" Name="Status" Kind="OutputPin" />
-            <Pin Id="Cifs31j52cmNqQHf7Patp3" Name="Is Connected" Kind="OutputPin" />
-          </Node>
-          <Pad Id="KcFjXUYy8sCLAxrtWa9fmw" Comment="Port Name" Bounds="166,180,57,15" ShowValueBox="true" isIOBox="true" Value="COM11">
+          <Pad Id="KcFjXUYy8sCLAxrtWa9fmw" Comment="Port Name" Bounds="166,180,57,15" ShowValueBox="true" isIOBox="true" Value="COM4">
             <p:TypeAnnotation LastCategoryFullName="IO.Ports" LastDependency="VL.CoreLib.vl">
               <Choice Kind="TypeFlag" Name="ComPort" />
             </p:TypeAnnotation>
@@ -239,7 +220,11 @@
             <Pin Id="QCOWIGNOnQwOhnJbQvIWfs" Name="Zoom" Kind="OutputPin" />
             <Pin Id="VICvUFEBVs5MS4m28VVQ9n" Name="Idle" Kind="OutputPin" />
           </Node>
-          <Pad Id="EmU8dmFArX9PFgZl6kkRCN" Comment="Device Info" Bounds="191,401,286,62" ShowValueBox="true" isIOBox="true" />
+          <Pad Id="EmU8dmFArX9PFgZl6kkRCN" Comment="Device Info" Bounds="191,401,286,62" ShowValueBox="true" isIOBox="true">
+            <p:TypeAnnotation LastCategoryFullName="Primitive" LastDependency="VL.CoreLib.vl">
+              <Choice Kind="TypeFlag" Name="String" />
+            </p:TypeAnnotation>
+          </Pad>
           <Pad Id="VUrf8KvubdZO0BlKh1LP21" Comment="Scan" Bounds="246,266,35,35" ShowValueBox="true" isIOBox="true" Value="True">
             <p:TypeAnnotation LastCategoryFullName="Primitive" LastDependency="VL.CoreLib.vl">
               <Choice Kind="ImmutableTypeFlag" Name="Boolean" />
@@ -275,14 +260,16 @@
               <p:stringtype p:Assembly="VL.Core" p:Type="VL.Core.StringType">Comment</p:stringtype>
             </p:ValueBoxSettings>
           </Pad>
-          <Pad Id="HxHjud2FFjpPx4J9tbSy3V" Comment="Baud Rate" Bounds="186,200,44,15" ShowValueBox="true" isIOBox="true" Value="256000">
+          <Pad Id="Si91mZWTZA3PgcgrakMn3V" Comment="Error Code" Bounds="216,358,35,15" ShowValueBox="true" isIOBox="true">
             <p:TypeAnnotation LastCategoryFullName="Primitive" LastDependency="VL.CoreLib.vl">
               <Choice Kind="TypeFlag" Name="Integer32" />
             </p:TypeAnnotation>
           </Pad>
-          <Pad Id="Si91mZWTZA3PgcgrakMn3V" Comment="Error Code" Bounds="216,358,35,15" ShowValueBox="true" isIOBox="true" />
-          <Pad Id="MIVWFI9mR6dNakpNf0RO7N" Comment="Status" Bounds="329,358,35,15" ShowValueBox="true" isIOBox="true" />
-          <Pad Id="MoVcbYVV61gLI6ILDjJfWL" Comment="Is Connected" Bounds="419,358,35,35" ShowValueBox="true" isIOBox="true" />
+          <Pad Id="MoVcbYVV61gLI6ILDjJfWL" Comment="Is Connected" Bounds="419,358,35,35" ShowValueBox="true" isIOBox="true">
+            <p:TypeAnnotation LastCategoryFullName="Primitive" LastDependency="VL.CoreLib.vl">
+              <Choice Kind="TypeFlag" Name="Boolean" />
+            </p:TypeAnnotation>
+          </Pad>
           <Pad Id="KM6zmOQRTJSOpLurpx11E1" Bounds="95,70,246,39" ShowValueBox="true" isIOBox="true" Value="For driver installation requirements, see Getting Started section here: ">
             <p:TypeAnnotation LastCategoryFullName="Primitive" LastDependency="VL.CoreLib.vl">
               <Choice Kind="TypeFlag" Name="String" />
@@ -328,6 +315,29 @@
             <Pin Id="I0M76sUDRSCPEZquiPWiUx" Name="Value" Kind="OutputPin" />
             <Pin Id="CNnFJ9F5ZZwNRBi4W62kHO" Name="On Data" Kind="OutputPin" />
           </Node>
+          <Node Bounds="166,310,105,19" Id="PYY1079Z3FNQRPO09amUPm">
+            <p:NodeReference LastCategoryFullName="Devices.RPLidar" LastDependency="VL.Devices.RPLidarUtils.csproj">
+              <Choice Kind="NodeFlag" Name="Node" Fixed="true" />
+              <Choice Kind="ProcessAppFlag" Name="RPLidar" />
+            </p:NodeReference>
+            <Pin Id="VJvz3U56op0LuNpkaYZl9D" Name="Port Name" Kind="InputPin" />
+            <Pin Id="FzrzQloULBYLy1MEqmDUeB" Name="Baud Rate" Kind="InputPin" />
+            <Pin Id="HLrl7kOOaLCPF4LOCQenL6" Name="Timeout" Kind="InputPin" />
+            <Pin Id="CQw5LoPZUjTNQkHTNlcxs9" Name="Scan" Kind="InputPin" />
+            <Pin Id="QyWnyR3SeEZPOHCb6nbLyx" Name="Enabled" Kind="InputPin" />
+            <Pin Id="IbkN6q2Ik9NLOkuVmOxqsp" Name="Scaling" Kind="InputPin" />
+            <Pin Id="K1TVQFcEsdVLUQu1gzK5hQ" Name="Result" Kind="OutputPin" />
+            <Pin Id="RkPzNi5TQneO5ZRgJHiQJ5" Name="Device Info" Kind="OutputPin" />
+            <Pin Id="G7Nvmk0m0YQMCkVGwD8ioA" Name="Is Connected" Kind="OutputPin" />
+            <Pin Id="S4BaIHFyiw4O9DUCEZkP4m" Name="Status" Kind="OutputPin" />
+            <Pin Id="ChHYGPtG5lnOFzwElwcYRx" Name="Error Code" Kind="OutputPin" />
+          </Node>
+          <Pad Id="JpnrItN3IqCP95twJ5jCC3" Comment="Baud Rate" Bounds="186,230,111,15" ShowValueBox="true" isIOBox="true" Value="CAndSSeries">
+            <p:TypeAnnotation LastCategoryFullName="Devices.RPLidar.RPLidarNode" LastDependency="VL.Devices.RPLidarUtils.csproj">
+              <Choice Kind="TypeFlag" Name="RPLidarBaudRate" />
+            </p:TypeAnnotation>
+          </Pad>
+          <Pad Id="ArHMXpr5cJaMZsVGnDE4n6" Comment="Status" Bounds="373,480,49,15" ShowValueBox="true" isIOBox="true" />
         </Canvas>
         <Patch Id="VQ03JHOiNJ2MKwdCwZ2kEg" Name="Create" />
         <Patch Id="VUhWUKG80d4QcoVSLYgxc4" Name="Update" />
@@ -335,22 +345,23 @@
           <Fragment Id="JQ1x0No9qNDOT6fevivoxx" Patch="VQ03JHOiNJ2MKwdCwZ2kEg" Enabled="true" />
           <Fragment Id="V8jf2vQsU6nQLXGFnpi5bZ" Patch="VUhWUKG80d4QcoVSLYgxc4" Enabled="true" />
         </ProcessDefinition>
-        <Link Id="EwroDPu9TVVPo7uqVx31sw" Ids="KcFjXUYy8sCLAxrtWa9fmw,JnIolCbESWXPv2lcPbVLBO" />
-        <Link Id="IRCD6xoLXQAPoBPcXii2cw" Ids="OZsz5vrKbv0NYKGr4YggbP,FOQNwLpOaGwNIumrQdHHtU" />
         <Link Id="COlA8qmTV7fOAYQl9SPiGX" Ids="VsxDA16dgRUPDc9Ac0XAj9,Ios6m2PfTeEPj0lM3z2HIu" />
-        <Link Id="TLzpKYY6RJiMZplnUqZZ4l" Ids="Rc74yTEGqBxLuGApCYJYZS,EmU8dmFArX9PFgZl6kkRCN" />
-        <Link Id="N2AKgjrPHmgP0AiiIeIgHh" Ids="VUrf8KvubdZO0BlKh1LP21,UGCgsgcdDJ5Mw9SlXyFnI6" />
-        <Link Id="IIlTTPXbEh9OWVKVxuZrOy" Ids="HxHjud2FFjpPx4J9tbSy3V,Ds4kRbo8MXHOTWrGvsoDXM" />
-        <Link Id="E56ox2XmONjNcr8GIhcJvz" Ids="L1TM6TVcs96Nsy6AjWoFb2,Si91mZWTZA3PgcgrakMn3V" />
-        <Link Id="GHtr1qMbkBYPKXsMrRKIVb" Ids="RpI5Nqzc4KpNqeO1pTdS65,MIVWFI9mR6dNakpNf0RO7N" />
-        <Link Id="MJ2PGGGG192MvYGZKFheoI" Ids="Cifs31j52cmNqQHf7Patp3,MoVcbYVV61gLI6ILDjJfWL" />
         <Link Id="ARvIHY7YGjFMxaDOIZAVeD" Ids="Tq5h8sRX99wPj7vOP2uRwy,MUoKu5i2eMePEIZRMRbJXP" />
         <Link Id="HPaSWC7zKwtOvgYD2aueAi" Ids="IocP47rRYK4NZCJyHecDKu,BNwJhyuJ13GN458vcknN4m" />
-        <Link Id="JmkEP5zwH5JOaJdzhEp7Gd" Ids="BUbMAdkcFi7QWlEn6gWKa0,P7PzenWhBb9M0Q935bWj5H" />
         <Link Id="CDTAWKggfGaLSpkIlbLn1i" Ids="I0M76sUDRSCPEZquiPWiUx,QdQRbBtMM73NO8nrKaW2Y1" />
+        <Link Id="OibSGj4zmfeP4P6qM0SZPN" Ids="KcFjXUYy8sCLAxrtWa9fmw,VJvz3U56op0LuNpkaYZl9D" />
+        <Link Id="VrhXj4UDvloO44jb0TU6x2" Ids="JpnrItN3IqCP95twJ5jCC3,FzrzQloULBYLy1MEqmDUeB" />
+        <Link Id="CqrndSaidDLLJ0fuAEG6hy" Ids="VUrf8KvubdZO0BlKh1LP21,CQw5LoPZUjTNQkHTNlcxs9" />
+        <Link Id="OfCqEZbkzpkOAXclEwmtn4" Ids="OZsz5vrKbv0NYKGr4YggbP,QyWnyR3SeEZPOHCb6nbLyx" />
+        <Link Id="SXBQueLoserPMy1Uhy4pSs" Ids="K1TVQFcEsdVLUQu1gzK5hQ,P7PzenWhBb9M0Q935bWj5H" />
+        <Link Id="PPFcSPtF1uHMc04XhdSq1e" Ids="RkPzNi5TQneO5ZRgJHiQJ5,EmU8dmFArX9PFgZl6kkRCN" />
+        <Link Id="DibbVQwGC8gPaxv4fYwQAI" Ids="G7Nvmk0m0YQMCkVGwD8ioA,MoVcbYVV61gLI6ILDjJfWL" />
+        <Link Id="OUomF2Y0Lf6QHvdoPNc1n2" Ids="S4BaIHFyiw4O9DUCEZkP4m,ArHMXpr5cJaMZsVGnDE4n6" />
+        <Link Id="MtRDQKSSgUdP2m07a5sOwQ" Ids="ChHYGPtG5lnOFzwElwcYRx,Si91mZWTZA3PgcgrakMn3V" />
       </Patch>
     </Node>
   </Patch>
-  <NugetDependency Id="Vww2yCurqPxLxo6VVSHnYJ" Location="VL.Devices.RPLidar" Version="0.0.0" />
+  <NugetDependency Id="Vww2yCurqPxLxo6VVSHnYJ" Location="VL.Devices.RPLidar" Version="1.0.2" />
   <NugetDependency Id="BqT2EqCcb1IQSqUYFc1NNw" Location="VL.Skia" Version="2025.7.0" />
+  <ProjectDependency Id="UDxqYKWhdTcPeLXVFOlCa5" Location="../src/VL.Devices.RPLidarUtils/VL.Devices.RPLidarUtils.csproj" />
 </Document>
