@@ -3,7 +3,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/10/nuspec.xsd">
   <metadata>
     <id>VL.Devices.RPLidar</id>
-    <version>1.0.2</version>
+    <version>1.0.3</version>
     <title>VL.Devices.RPLidar</title>
     <authors>vvvv</authors>
     <projectUrl>http://vvvv.org</projectUrl>
@@ -18,7 +18,7 @@
   <files>
     <file src="..\*.vl" target="" exclude="" />
     <file src="..\help\**" target="help\" exclude="" />
-	<file src="..\lib\**\*.dll" target="lib\" exclude="" />
+    <file src="..\lib\**\*.dll" target="lib\" exclude="" />
     <file src="nugeticon.png" target="icon\" />
     <file src="..\README.md" target="docs\" />
   </files>
